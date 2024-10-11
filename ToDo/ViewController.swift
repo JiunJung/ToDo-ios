@@ -144,6 +144,7 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
         let newTodo = Todo(context: self.context)
         newTodo.task = taskName
         newTodo.date = taskDate
+        newTodo.isCompleted = false
         todos.append(newTodo)
         // AppDelegate의 saveContext() 함수 호출로 저장
         do{
@@ -171,6 +172,7 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
     func updateTodoTask(todo: Todo, newTaskName: String, newTaskDate: Date) {
         todo.task = newTaskName
         todo.date = newTaskDate
+        todo.isCompleted = todo.isCompleted
         // 변경 사항 저장
         do{
             try self.context.save()
@@ -189,7 +191,6 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
             print("Failed to delete tasks: \(error.localizedDescription)")
         }
     }
-    //alalalla
     //--------------------------------------------------------------------Table View Delegate Functions-------------------------------------------------------------------------//
     
     //Delegate Functions from UITableViewDelegate and UITableViewDataSouce
@@ -223,17 +224,25 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
         let todo = todos[indexPath.row]
         
         //아래의 코드 한 줄이 셀 순서가 뒤바뀌는 것을 막는다. 셀 재사용 과정에서 이전에 삭제되지 않은 서브뷰인 텍스트뷰가 중복으로 떠서 뒤바뀌는 것이다.
-        cell.contentView.subviews.forEach { $0.removeFromSuperview() } //중복된 서브뷰를 방지하기 위해, 모든 서브뷰를 제거.
-        
-        let textField = UITextField(frame: cell.contentView.bounds)
-        textField.text = todo.task
-        textField.delegate = self
-        
-        // 중복 추가 방지
-        if cell.contentView.subviews.isEmpty {
+        cell.contentView.subviews.forEach { $0.removeFromSuperview() } //중복된 서브뷰를 방지하기 위해, cellForRowAt에 해당하는 셀의 모든 서브뷰를 제거.
+
+        //완료된 Task는 흐리게 표시하고 취소선을 적용.
+        if todo.isCompleted {
+            let label = UILabel(frame: cell.contentView.bounds)
+            label.text = todo.task
+            label.textColor = .gray
+            label.font = UIFont.systemFont(ofSize: 16)
+            label.attributedText = NSAttributedString(string: todo.task!, attributes: [.strikethroughStyle: NSUnderlineStyle.single.rawValue])
+            
+            cell.contentView.addSubview(label)
+        }else{
+            let textField = UITextField(frame: cell.contentView.bounds)
+            textField.text = todo.task
+            textField.delegate = self
+            
             cell.contentView.addSubview(textField)
         }
-
+        
         return cell
     }
 
@@ -245,6 +254,44 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
             todos.remove(at: indexPath.row)
             tableView.deleteRows(at: [indexPath], with: .automatic)
         }
+    }
+    
+    // 셀을 왼쪽으로 스와이프 했을 때 실행되는 함수
+    func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+        // 삭제 버튼 설정
+        let deleteAction = UIContextualAction(style: .destructive, title: "Delete") { [weak self] (action, view, completionHandler) in
+            guard let self = self else { return }
+            let todoToDelete = self.todos[indexPath.row]
+            self.deleteTodoTask(todo: todoToDelete) // Core Data에서 삭제
+            self.todos.remove(at: indexPath.row) // 배열에서 삭제
+            tableView.deleteRows(at: [indexPath], with: .automatic)
+            completionHandler(true)
+        }
+        deleteAction.backgroundColor = .red
+
+        return UISwipeActionsConfiguration(actions: [deleteAction])
+    }
+
+    // 셀을 오른쪽으로 스와이프 했을 때 실행되는 함수
+    func tableView(_ tableView: UITableView, leadingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+        let todo = todos[indexPath.row]
+        let actionTitle = todo.isCompleted ? "To-do" : "Complete"
+
+        let completeAction = UIContextualAction(style: .normal, title: actionTitle) { [weak self] (action, view, completionHandler) in
+            guard let self = self else { return }
+
+            // 완료 상태 변경
+            todo.isCompleted.toggle()
+
+            // Core Data에 완료 상태 업데이트
+            self.updateTodoTask(todo: todo, newTaskName: todo.task!, newTaskDate: todo.date!)
+
+            tableView.reloadRows(at: [indexPath], with: .automatic) // 셀 업데이트
+            completionHandler(true)
+        }
+        completeAction.backgroundColor = todo.isCompleted ? .blue : .green // 색상 설정
+
+        return UISwipeActionsConfiguration(actions: [completeAction])
     }
     
     
